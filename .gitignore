@@ -39,6 +39,16 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Service Account Keys (NEVER COMMIT THESE!)
+*credentials*.json
+*-credentials.json
+*.json.json
+*service-account*.json
+*serviceaccount*.json
+gee-data-*.json
+key.json
+keys/*.json
+
 # Earth Engine Keys
 ee-credentials.json
 key.json

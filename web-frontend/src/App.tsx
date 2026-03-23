@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import LeafletMap from './components/LeafletMap';
 import AuthOverlay from './components/AuthOverlay';
 import LandingPage from './components/LandingPage';
+import ComplaintModal from './components/ComplaintModal';
+import MyComplaints from './components/MyComplaints';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function App() {
@@ -12,9 +14,13 @@ export default function App() {
   const [selectedWard, setSelectedWard] = useState<any | null>(null);
   const [geeData, setGeeData] = useState<any | null>(null);
   const [geeLoading, setGeeLoading] = useState<boolean>(false);
+  const [geeError, setGeeError] = useState<string | null>(null);
   const [forecast, setForecast] = useState<any[]>([]);
+  const [forecastError, setForecastError] = useState<string | null>(null);
+  const [wardsError, setWardsError] = useState<string | null>(null);
   const [granularity, setGranularity] = useState<'ward'|'district'>('ward');
   const [showLanding, setShowLanding] = useState<boolean>(true);
+  const [showComplaintModal, setShowComplaintModal] = useState(false);
 
   useEffect(() => {
     if (!selectedWard) {
@@ -26,29 +32,36 @@ export default function App() {
     
     async function fetchGEE() {
         setGeeLoading(true);
+        setGeeError(null);
+        const start = Date.now();
         try {
             const res = await fetch(`${API_BASE}/api/v1/gee/analyze?lat=${selectedWard.lat}&lon=${selectedWard.lon}`);
-            if (res.ok) setGeeData(await res.json());
-        } catch (e) {
-            console.error(e);
+            const elapsed = Date.now() - start;
+            console.log(`[App] GET /gee/analyze → ${res.status} in ${elapsed}ms`);
+            if (!res.ok) throw new Error(`Satellite API returned ${res.status}`);
+            setGeeData(await res.json());
+        } catch (e: any) {
+            setGeeError(e.message || 'Satellite data unavailable');
+            setGeeData(null);
         } finally {
             setGeeLoading(false);
         }
     }
     
     async function fetchForecast() {
+        setForecastError(null);
         try {
             const res = await fetch(`${API_BASE}/api/v1/dashboard/forecast?lat=${selectedWard.lat}&lon=${selectedWard.lon}`);
-            if (res.ok) {
-                const data = await res.json();
-                const formatted = data.map((d: any) => ({
-                    ...d,
-                    day: new Date(d.time).toLocaleDateString('en-US', { weekday: 'short' })
-                }));
-                setForecast(formatted);
-            }
-        } catch (e) {
-            console.error(e);
+            if (!res.ok) throw new Error(`Forecast API returned ${res.status}`);
+            const data = await res.json();
+            const formatted = data.map((d: any) => ({
+                ...d,
+                day: new Date(d.time).toLocaleDateString('en-US', { weekday: 'short' })
+            }));
+            setForecast(formatted);
+        } catch (e: any) {
+            setForecastError(e.message || 'Forecast unavailable');
+            setForecast([]);
         }
     }
     
@@ -58,20 +71,23 @@ export default function App() {
 
   useEffect(() => {
     async function fetchDashboardData() {
+      setWardsError(null);
+      const start = Date.now();
       try {
-        const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
-        // Fetch LIVE Stats with dynamic filtering
+        const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:8080";
         const statsRes = await fetch(`${API_BASE}/api/v1/dashboard/wards?level=${granularity}`);
-        if (statsRes.ok) {
-           const data = await statsRes.json();
-           setWards(data);
-        }
+        const elapsed = Date.now() - start;
+        console.log(`[App] GET /dashboard/wards → ${statsRes.status} in ${elapsed}ms`);
+        if (!statsRes.ok) throw new Error(`Ward data API returned ${statsRes.status}`);
+        setWards(await statsRes.json());
         
-        // Fetch Policies
-        const recsRes = await fetch(`${API_BASE}/api/v1/dashboard/recommendations`);
-        if (recsRes.ok) setRecs(await recsRes.json());
-      } catch (e) {
-        console.error("Dashboard backend API error:", e);
+        // Fetch AI Policy Recommendations (non-critical, don't block UI)
+        try {
+          const recsRes = await fetch(`${API_BASE}/api/v1/dashboard/recommendations`);
+          if (recsRes.ok) setRecs(await recsRes.json());
+        } catch { /* non-critical, ticker will show empty */ }
+      } catch (e: any) {
+        setWardsError(e.message || 'Failed to load ward data from backend.');
       }
     }
     fetchDashboardData();
@@ -106,7 +122,16 @@ export default function App() {
   return (
     <div className="bg-[#0c0e12] text-slate-100 font-sans selection:bg-cyan-500/30 overflow-hidden h-screen flex flex-col relative w-screen">
       
-      {/* ─── HACKATHON EDGE: Supabase Native Auth Gateway ─── */}
+      {/* ComplaintModal — real DB submission, replaces the old fake alert() */}
+      {showComplaintModal && (
+        <ComplaintModal
+          ward={selectedWard}
+          userProfile={userProfile}
+          onClose={() => setShowComplaintModal(false)}
+        />
+      )}
+
+      {/* ─── Supabase Native Auth Gateway ─── */}
       <AuthOverlay session={session} setSession={setSession} userProfile={userProfile} setUserProfile={setUserProfile} />
 
       {/* TopNavBar */}
@@ -238,10 +263,18 @@ export default function App() {
                 {geeLoading ? (
                     <div className="bg-slate-900/30 border border-white/5 p-6 rounded-2xl flex flex-col items-center justify-center min-h-[140px] mb-6">
                         <span className="material-symbols-outlined text-cyan-400 animate-spin text-3xl mb-3">satellite_alt</span>
-                        <p className="font-label text-[10px] text-cyan-400 font-bold tracking-[0.2em] uppercase animate-pulse">Establishing S5P Link...</p>
+                        <p className="font-label text-[10px] text-cyan-400 font-bold tracking-[0.2em] uppercase animate-pulse">Querying Sentinel-5P satellite...</p>
+                    </div>
+                ) : geeError ? (
+                    <div className="bg-rose-500/5 border border-rose-500/20 p-4 rounded-2xl flex items-start gap-3 mb-6">
+                        <span className="material-symbols-outlined text-rose-400 text-lg shrink-0">satellite_alt</span>
+                        <div>
+                            <p className="text-[10px] font-bold text-rose-400 uppercase tracking-widest">Satellite Link Failed</p>
+                            <p className="text-xs text-rose-400/70 mt-0.5">{geeError}</p>
+                        </div>
                     </div>
                 ) : geeData && (
-                    <div className="bg-slate-900/30 border border-white/5 p-6 rounded-2xl relative overflow-hidden group hover:border-cyan-500/30 transition-all duration-300 mb-6">
+                    <div className="bg-slate-900/30 border border-white/5 p-6 rounded-2xl relative overflow-hidden group hover:border-cyan-500/30 transition-all duration-300 mb-6 shrink-0">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 blur-3xl group-hover:bg-cyan-500/10 pointer-events-none"></div>
                         <h3 className="font-label text-[10px] font-black uppercase text-cyan-500 tracking-[0.2em] mb-4 flex items-center gap-2">
                             <span className="material-symbols-outlined text-[14px]">insights</span>
@@ -270,7 +303,12 @@ export default function App() {
                         <span className="material-symbols-outlined text-[14px]">timeline</span>
                         8-Day Neural Forecast
                     </h3>
-                    {forecast.length > 0 ? (
+                    {forecastError ? (
+                        <div className="flex-1 flex flex-col items-center justify-center gap-2">
+                            <span className="material-symbols-outlined text-slate-600">timeline</span>
+                            <p className="text-xs text-slate-500">{forecastError}</p>
+                        </div>
+                    ) : forecast.length > 0 ? (
                         <div className="flex-1 w-full min-h-0">
                             <ResponsiveContainer width="100%" height="100%">
                                 <LineChart data={forecast} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
@@ -292,16 +330,15 @@ export default function App() {
                     )}
                 </div>
 
-                {/* HACKATHON EDGE: CITIZEN REPORTING BUTTON */}
-                <div className="mt-8 shrink-0">
+                {/* CITIZEN REPORTING — Now REAL: opens ComplaintModal which POSTs to DB */}
+                <div className="mt-6 shrink-0">
                   <button 
-                    onClick={() => {
-                      alert(`[VAYUDRISHTI SYSTEM] Locating device at (${selectedWard.lat}, ${selectedWard.lon})...\n\nBiomass burning incident formally logged to the central database. Ground truth data fed into Neural Network. Thank you!`);
-                    }}
+                    onClick={() => setShowComplaintModal(true)}
                     className="w-full flex items-center justify-center gap-3 py-4 rounded-xl bg-gradient-to-r from-rose-600 to-rose-800 text-white font-headline text-xs font-bold tracking-[0.2em] uppercase hover:shadow-[0_0_20px_rgba(244,63,94,0.3)] active:scale-95 transition-all">
                     <span className="material-symbols-outlined text-lg">local_fire_department</span>
-                    Log Biomass Action
+                    Report an Incident
                   </button>
+                  <MyComplaints userProfile={userProfile} />
                 </div>
              </div>
           ) : (
@@ -325,7 +362,8 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="bg-slate-900/30 rounded-2xl border border-white/5 flex flex-col overflow-hidden max-h-[450px]">
+                  {/* Right Panel - Context & Analytics */}
+                  <div className="bg-slate-900/30 rounded-2xl border border-white/5 flex flex-col overflow-y-auto max-h-[450px]">
                      <div className="p-4 bg-slate-900 border-b border-white/5 flex items-center justify-between shadow-sm shrink-0">
                         <span className="font-label text-[9px] tracking-[0.2em] font-bold uppercase text-amber-500">Llama 3 Network Directives</span>
                         <div className="flex gap-2">

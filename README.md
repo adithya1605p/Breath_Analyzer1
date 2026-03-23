@@ -1,151 +1,86 @@
-# 🌫️ BreatheSafe — AI-Powered Clean Air Navigation
+# 🌍 VayuDrishti: Atmospheric Command System
 
-> **Hackathon Round 2 Submission** — Proof of Concept
+VayuDrishti is an **Enterprise-Grade Air Quality Intelligence & Predictive Dashboard** built for hyper-local environmental monitoring in Delhi. It aggregates real-time monitoring stations, satellite telemetry, and meteorological data into a seamless React-based spatial command center.
 
-BreatheSafe is a Spatio-Temporal Graph Neural Network routing system that helps citizens of Hyderabad navigate using the **cleanest air route**, not just the shortest one. It combines real-world OpenStreetMap road data, a trained **A3T-GCN (Attention Temporal Graph Convolutional Network)** AI model, and a live interactive map to show you two routes side-by-side: the fastest path vs. the lowest pollution exposure path.
-
----
-
-## 🔬 How It Works
-
-```
-User Input (Start/End) 
-    → FastAPI Backend 
-    → OSMnx 60KM Road Graph (Hyderabad)
-    → A* Spatio-Temporal Router [alpha·Distance + beta·PM2.5_Exposure]
-    → A3T-GCN PyTorch Model (Predicts PM2.5 per road segment)
-    → GeoJSON Routes returned
-    → React + Leaflet Map (Dark Mode, Live heatmap overlay)
-```
-
-### The AI Model — A3T-GCN
-- **Spatial:** Graph Convolutional Network learns which neighbouring intersections share pollution patterns
-- **Temporal:** GRU (Gated Recurrent Unit) processes the last 24 hours of data
-- **Attention:** Weights which past time-steps matter most for prediction
-- **Trained on:** 14 days of synthesized PM2.5 data across 7,436 major intersections in Hyderabad (60km diameter)
+The core objective is to provide actionable municipal insights—shifting from purely displaying current AQI to actively predicting pollution trajectories and generating immediate policy enforcement directives using Google Cloud's most advanced experimental AI models.
 
 ---
 
-## 🚀 Setup Instructions
+## 📚 Documentation
 
-### Prerequisites
-- Python 3.10+
-- Node.js 18+
-- Git
+### Analysis & Testing
+- **[📋 Executive Summary](./CODEBASE_ANALYSIS_SUMMARY.md)** - High-level overview of analysis and findings
+- **[🚀 Quick Reference Guide](./QUICK_REFERENCE.md)** - Setup, API endpoints, common tasks
+- **[🔒 Hardcoded Values Audit](./HARDCODED_VALUES_AUDIT.md)** - Security audit and configuration tracking
+- **[📝 Audit Session Log](./AUDIT_SESSION_LOG.md)** - Detailed analysis and findings
+- **[🧪 Testing Summary](./TESTING_SUMMARY.md)** - End-to-end test results overview
+- **[📊 Test Results Report](./TEST_RESULTS_REPORT.md)** - Comprehensive AQI validation analysis
 
-### 1. Clone the Repository
-```bash
-git clone <your-repo-url>
-cd iitbhu
-```
-
-### 2. Backend Setup
-```bash
-cd backend
-
-# Create and activate virtual environment
-python -m venv venv
-
-# Windows
-.\venv\Scripts\Activate.ps1
-# Mac/Linux
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Start the backend server
-uvicorn app.main:app --port 8000 --reload
-```
-
-> ⚠️ **First Run Note:** On the very first startup, the backend will automatically download the Hyderabad city road map from OpenStreetMap (~2-3 minutes). This only happens once — subsequent starts load from local cache instantly.
-
-### 3. Frontend Setup
-```bash
-cd web-frontend
-
-# Install dependencies
-npm install
-
-# Start the development server
-npm run dev
-```
-
-### 4. Open the App
-Navigate to **http://localhost:5173** in your browser.
+### Improvement Roadmap
+- **[🎯 Action Plan](./ACTION_PLAN.md)** - 4-week step-by-step implementation plan
+- **[📖 Step-by-Step Training Guide](./STEP_BY_STEP_TRAINING_GUIDE.md)** - Complete model retraining instructions
+- **[🔍 Dwarka Investigation](./DWARKA_INVESTIGATION.md)** - Detailed analysis of Dwarka anomaly
+- **[✨ New Features Report](./NEW_FEATURES_REPORT.md)** - Recommended features and improvements
+- **[🗺️ Improvement Roadmap](./IMPROVEMENT_ROADMAP.md)** - Long-term enhancement strategy
 
 ---
 
-## 🗂️ Project Structure
+## 🚀 What We Accomplished
+Throughout the development journey, we transformed a prototype dashboard into a hardened, production-ready system:
 
-```
-iitbhu/
-├── backend/
-│   ├── app/
-│   │   ├── ai/
-│   │   │   ├── a3tgcn.py          # A3T-GCN PyTorch model architecture
-│   │   │   ├── dataset.py         # PyTorch Geometric dataset loader
-│   │   │   ├── train.py           # Model training loop
-│   │   │   ├── inference.py       # Live PM2.5 prediction engine (singleton)
-│   │   │   └── data_synthesis.py  # 60KM Hyderabad data generator
-│   │   ├── api/
-│   │   │   └── endpoints/
-│   │   │       └── navigation.py  # FastAPI route endpoints + A* trigger
-│   │   ├── services/
-│   │   │   └── routing_engine.py  # Custom A* Spatio-Temporal Router
-│   │   └── data/
-│   │       ├── a3tgcn_weights.pt              # Trained PyTorch model
-│   │       ├── synthetic_training_tensor.pkl  # Training dataset
-│   │       └── hyderabad_60km_major.graphml   # 60KM road graph
-│   └── requirements.txt
-└── web-frontend/
-    └── src/
-        ├── App.tsx                # Root app, API calls
-        └── components/
-            ├── LeafletMap.tsx     # Interactive Leaflet dark-mode map
-            └── MapControl.tsx     # Route controls + health slider
-```
+1. **Full-Stack Architecture**: Stabilized a **FastAPI/PyTorch backend** mapped to a **Vite + React (Tailwind/Leaflet) frontend**, authenticated entirely via **Supabase**.
+2. **Neural Forecasting (TNN)**: Trained and integrated a custom predictive Temporal Neural Network (`train_vayu_v2.py`) based on real, historical Delhi AQI indices (251 distinct geographic wards) instead of relying purely on generalized third-party APIs.
+3. **Admin Enforcement Suite**: Deployed a fully secured Admin portal allowing specialized municipal actions (assigning tasks, evaluating complaints). Resolved dangerous JWT token handling bugs within `deps.py` that caused infinite 401 Unauthorized loops.
+4. **Google Earth Engine Integration**: Successfully linked the system to Sentinel-5P satellite telemetry (`gee.py`). Replaced unsafe hardcoded keys with a secure OAuth2 cryptographically signed Service Account method (`ee-credentials.json`).
+5. **Experimental AI (Gemini 3 Pro Preview)**: Replaced mock recommendation logic with live, unreleased Vertex AI model inference via Model Garden, generating actual policy reactions based on incoming satellite and terrestrial data.
+6. **Local Network Broadcasting**: Configured the Vite frontend and FastAPI CORS middleware dynamically so the mobile-responsive interface could be accessed and demoed natively across internal Wi-Fi networks (e.g., `192.168.0.137`) for live phone testing.
 
 ---
 
-## 🎯 Key Features
+## 🛑 Challenges Faced & Resolved
 
-| Feature | Description |
-|---|---|
-| 🗺️ **60KM City Map** | Full Hyderabad metropolitan road network |
-| 🤖 **A3T-GCN AI** | Spatio-Temporal Graph Neural Network predicts PM2.5 per road |
-| 🔴 **Fastest Route** | Standard shortest-path (red dashed line) |
-| 🟢 **Cleanest Route** | Minimum pollution-exposure path (solid green line) |
-| 🎚️ **Health Slider** | Tune the tradeoff between speed and clean air (0–100%) |
-| 📊 **Route Stats** | Shows distance, exposure reduction %, and PM2.5 delta |
-| 🌙 **Dark Map** | CARTO dark basemap for visibility |
+* **Vertex AI Model Garden 404s**:
+  * **Issue**: The API consistently threw `NOT_FOUND` on the `gemini-3-pro-preview` model despite it being explicitly linked by Google Cloud.
+  * **Fix**: Discovered that experimental Model Garden instances bypass standard API routing. We fundamentally reprogrammed the `google-genai` SDK logic to target explicitly the `global` region flag, successfully bypassing the default `us-central1` rejections.
 
----
+* **Earth Engine Initialization Crashes**:
+  * **Issue**: Even after replacing API keys with a correct Service Account JSON file, the Google Earth Engine Python API crashed the server on boot natively with `503` and gRPC errors.
+  * **Fix**: It wasn't enough to enable the Earth Engine API at a project level. We diagnosed the underlying IAM tree and realized the Service Account specifically required the `Earth Engine Resource Viewer` role attached to it in Google Cloud Console. Guided the deployment through this final authentication barrier.
 
-## 🧪 Running the AI Training (Optional)
-
-The trained weights are already included. To retrain:
-
-```bash
-cd backend
-
-# Step 1: Generate 60KM dataset (takes ~5 min)
-python -m app.ai.data_synthesis
-
-# Step 2: Train the A3T-GCN model
-python -m app.ai.train
-```
+* **Frontend Flexbox Clipping (CSS CSS Bug)**:
+  * **Issue**: The newly activated "Orbital Analysis" block loaded satellite data perfectly from backend but was viciously crushed to `0px` inside the Right Nav Panel.
+  * **Fix**: The massive flex-box requirements of the 8-Day Neural Forecast chart on smaller laptop screens forcibly collapsed adjacent UI elements. Reprogrammed the DOM with absolute `shrink-0` bounds to prevent React from legally prioritizing chart space over critical telemetry.
 
 ---
 
-## 📦 Tech Stack
+## 📋 Configuration & Security Audit
 
-**Backend:** Python, FastAPI, Uvicorn, OSMnx, NetworkX, PyTorch, PyTorch Geometric  
-**Frontend:** React, TypeScript, Vite, Leaflet, react-leaflet  
-**AI Model:** A3T-GCN (Attention Temporal Graph Convolutional Network)  
-**Data:** OpenStreetMap (OSMnx), Synthesized PM2.5 temporal data
+**IMPORTANT**: A comprehensive audit of hardcoded values has been documented in [`HARDCODED_VALUES_AUDIT.md`](./HARDCODED_VALUES_AUDIT.md).
+
+This audit identifies:
+- 🚨 Exposed API keys and credentials that need immediate rotation
+- 📍 Geographic hardcodes (Delhi/Hyderabad boundaries, coordinates)
+- 🗄️ Database configuration defaults
+- 🤖 AI/ML model paths and parameters
+- 🌐 External API endpoints
+- 🏥 Health calculation thresholds
+- 🛰️ Satellite data collection parameters
+
+**Action Required Before Production Deployment:**
+1. Rotate all exposed API keys (WAQI, Supabase)
+2. Move credentials to Google Secret Manager
+3. Remove service account JSON files from repository
+4. Externalize all configuration to environment variables
+5. Review and implement security recommendations
 
 ---
 
-## 👥 Team
-IIT BHU Hackathon Team
+## ⏭️ What Happens Next?
+
+With the system secured under "enterprise lock-down" (zero mock data, full live API streams), the immediate next phases are:
+
+1. **Security Hardening**: Address all items in `HARDCODED_VALUES_AUDIT.md` before deployment
+2. **Public Cloud Deployment**: Containerize the FastAPI backend via **Docker** and push to **Google Cloud Run** using the existing `gee-data-490807` infrastructure. Host the React frontend on **Vercel** or **Firebase Hosting**.
+3. **Continuous AI Fine-Tuning**: Now that Gemini 3 is ingesting dynamic satellite payloads, we can feed it specialized municipal handbooks through Vertex AI's context engine to produce specifically formulated legal mandates rather than general mitigation strategies.
+4. **WebSockets for Live Refresh**: Upgrade the current REST-based fetching strategy on the frontend maps to an active WebSocket listener, automatically re-rendering the satellite layers the second a sudden PM2.5 anomaly spikes.
+5. **Push Notifications Flow**: Finalize the Supabase Edge Functions required to instantly text/email administrative users when an Admin Action is triggered by the system.

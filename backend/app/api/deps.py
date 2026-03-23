@@ -6,6 +6,7 @@ from sqlalchemy import select
 from app.db.admin_models import Profile
 import json
 import base64
+import uuid
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
@@ -29,7 +30,15 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
         result = await db.execute(select(Profile).where(Profile.id == user_id))
         user = result.scalars().first()
         if not user:
-            raise HTTPException(status_code=404, detail="User profile not found")
+            print(f"[AUTH] Auto-provisioning missing Profile for {user_id}")
+            email = payload.get("email", f"user_{user_id[:8]}@example.com")
+            role = payload.get("app_metadata", {}).get("role", "citizen")
+            # Create a new Profile record seamlessly
+            user_uuid = uuid.UUID(user_id)
+            user = Profile(id=user_uuid, username=email, role=role)
+            db.add(user)
+            await db.commit()
+            await db.refresh(user)
             
         return user
     except Exception as e:

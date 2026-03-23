@@ -31,30 +31,36 @@ class Recommendation(BaseModel):
     impact: str
     urgency: str
 
-# ─── Config (all from env vars or module-level constants — no hardcoding) ─────
+# ─── Config ──────────────────────────────────────────────────────────────────
 
 WAQI_TOKEN = os.environ.get("WAQI_TOKEN")
 if not WAQI_TOKEN:
     print("[FATAL] WAQI_TOKEN environment variable is missing. Real WAQI data cannot be fetched.")
 
-# Assuming 'settings' is imported or defined elsewhere, e.g., from a config file
-# For this change, I'll assume 'settings' is available. If not, this would cause an error.
-# Since the prompt only provides a snippet, I'll proceed with the assumption.
-# If 'settings' is not available, it would need to be imported, e.g., from app.config import settings
-# For now, I'll keep the original os.environ.get for GCP_PROJECT_ID and GCP_LOCATION
-# and add GEMINI_API_KEY from os.environ.get as well, to make it syntactically correct
-# without needing an external 'settings' object that isn't defined in the provided context.
-
-# Reverting to os.environ.get for GCP_PROJECT_ID and GCP_LOCATION to maintain
-# syntactic correctness within the provided file context, as 'settings' is not defined.
-# If 'settings' is indeed a global object, it would need to be imported.
 GCP_PROJECT_ID = os.environ.get("GCP_PROJECT_ID")
-GCP_LOCATION = os.environ.get("GCP_LOCATION", "us-central1")
+GCP_LOCATION   = os.environ.get("GCP_LOCATION", "us-central1")
+
+# Auto-detect project ID from the service account credentials file if not set via env var
+# This handles the case where no .env file exists (e.g., local Windows development)
+_CREDS_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'services', 'ee-credentials.json')
+if not GCP_PROJECT_ID and os.path.exists(_CREDS_PATH):
+    try:
+        import json as _json
+        _creds = _json.load(open(_CREDS_PATH))
+        GCP_PROJECT_ID = _creds.get("project_id")
+        if GCP_PROJECT_ID:
+            print(f"[GCP] Auto-detected project_id='{GCP_PROJECT_ID}' from ee-credentials.json")
+        else:
+            print("[GCP] ee-credentials.json has no project_id field")
+    except Exception as _e:
+        print(f"[GCP] Failed to read credentials for project_id: {_e}")
 
 if not GCP_PROJECT_ID:
-    print("[FATAL] GCP_PROJECT_ID is not configured. Policy recommendations will fail.")
-# The original 'else' block for vertexai.init is removed as per the instruction's implied change.
-# Delhi NCR bounding box — all 44 real CPCB/WAQI monitoring stations
+    print("[FATAL] GCP_PROJECT_ID not set and could not be read from credentials. Vertex AI will fail.")
+else:
+    print(f"[GCP] Project: {GCP_PROJECT_ID} | Location: {GCP_LOCATION}")
+
+# Delhi NCR bounding box — all CPCB/WAQI monitoring stations
 WAQI_BOUNDS_URL = f"https://api.waqi.info/map/bounds/?latlng=28.4,76.8,28.9,77.4&token={WAQI_TOKEN}"
 
 # ─── Utility Functions ─────────────────────────────────────────────────────────
@@ -313,9 +319,10 @@ async def get_ward_stats(level: str = 'ward'):
 @router.get("/recommendations", response_model=List[Recommendation])
 async def get_policy_recommendations():
     """
-    Generates real-time policy recommendations via Google Gemini 1.5,
-    analysing the top pollution hotspots from the live ML inference grid.
+    Generates real-time policy recommendations via Google Gemini 1.5 Pro.
+    AI calls are fully logged and monitored for repetition (reliability guard).
     """
+    import re, hashlib
     # Fix the async race condition: Wait up to 30s for ML cycle to populate cache
     for _ in range(300):
         if INFERENCE_GRID_CACHE.get("data"):
@@ -326,7 +333,7 @@ async def get_policy_recommendations():
 
     try:
         if not bad_zones:
-            raise ValueError("No inference data available yet")
+            raise ValueError("No inference data available yet — ML inference grid is empty")
 
         hotspot_text = "\n".join(
             f"- {z['name']}: AQI {z['aqi']} (PM2.5: {z['pm25']} µg/m³, Source: {z['dominant_source']})"
@@ -341,26 +348,45 @@ async def get_policy_recommendations():
             '[{"id":"REC-1","ward":"<zone>","issue":"<1 sentence>","action":"<1 sentence>","impact":"<1 sentence>","urgency":"Critical|High|Medium"}]'
         )
 
+        prompt_hash = hashlib.md5(prompt.encode()).hexdigest()[:8]
+        ai_start = time.time()
+        print(f"[AI] Gemini request starting | prompt_hash={prompt_hash} | hotspots={len(bad_zones)}")
+
         from google import genai
-        client = genai.Client(vertexai=True, project=GCP_PROJECT_ID, location=GCP_LOCATION)
+        client = genai.Client(vertexai=True, project=GCP_PROJECT_ID, location='global')
             
         response = await client.aio.models.generate_content(
-            model='gemini-1.5-pro',
+            model='gemini-3-pro-preview',
             contents=prompt
         )
-
-        import re
         text = response.text
+        ai_elapsed = int((time.time() - ai_start) * 1000)
+        response_hash = hashlib.md5(text.encode()).hexdigest()[:8]
+        print(f"[AI] Gemini response | elapsed={ai_elapsed}ms | response_hash={response_hash} | length={len(text)}")
+
+
+        # ── Repetition Detection Guard ───────────────────────────────────────
+        if not hasattr(get_policy_recommendations, "_response_hashes"):
+            get_policy_recommendations._response_hashes = []
+        recent = get_policy_recommendations._response_hashes
+        if recent.count(response_hash) >= 3:
+            print(f"[AI] ⚠ REPETITION DETECTED: response_hash={response_hash} appeared {recent.count(response_hash)}x in last {len(recent)} calls. AI may be unreliable.")
+        recent.append(response_hash)
+        if len(recent) > 10:
+            recent.pop(0)
+
         match = re.search(r"\[.*\]", text, re.DOTALL)
         if match:
             recs_data = json.loads(match.group(0))
             return [Recommendation(**r) for r in recs_data[:3]]
 
+        raise ValueError(f"AI response did not contain valid JSON array (hash={response_hash})")
+
     except Exception as e:
-        print(f"[Gemini LLM Error]: {e}")
+        print(f"[AI] Gemini FAILURE: {e}")
         raise HTTPException(
             status_code=503,
-            detail=f"Gemini LLM API failed to generate recommendations: {e}. No simulated responses allowed."
+            detail=f"AI policy engine failed: {str(e)}"
         )
 
 # ─── Feature 4: Wind Grid (MeteoJSON format) ──────────────────────────────────

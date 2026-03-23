@@ -1,18 +1,22 @@
 from dotenv import load_dotenv; load_dotenv()
 import os
+import time
 import pathlib
 
 # Globally configure Google Application Default Credentials to use our Backend Service Account
-# This ensures Vertex AI and Google Earth Engine SDKs authenticate seamlessly without Windows ADC hangs
 credentials_path = os.path.join(os.path.dirname(__file__), "services", "ee-credentials.json")
 if os.path.exists(credentials_path):
     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentials_path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.api.endpoints import api_router
 import asyncio
+
+# Track startup time for uptime calculation
+_start_time = time.time()
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -21,32 +25,62 @@ def create_app() -> FastAPI:
         openapi_url=f"{settings.API_V1_STR}/openapi.json"
     )
 
-    # Set up CORS
+    # CORS — restricted to explicit origins in production
+    cors_origins_env = os.getenv("CORS_ORIGINS", "")
+    allowed_origins = [o.strip() for o in cors_origins_env.split(",") if o.strip()] if cors_origins_env else ["*"]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"], # Update for production
+        allow_origins=allowed_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
+    # ─── Request Logging Middleware ───────────────────────────────────────────────
+    @app.middleware("http")
+    async def log_requests(request: Request, call_next):
+        request_id = f"req_{int(time.time() * 1000) % 100000}"
+        start = time.time()
+        response = await call_next(request)
+        elapsed = int((time.time() - start) * 1000)
+        status = response.status_code
+        slow_flag = " ⚠ SLOW" if elapsed > 1000 else ""
+        print(f"[{request_id}] {request.method} {request.url.path} → {status} ({elapsed}ms){slow_flag}")
+        response.headers["X-Request-ID"] = request_id
+        response.headers["X-Response-Time"] = f"{elapsed}ms"
+        return response
+
     @app.get("/")
     async def root():
-        return {"message": "Welcome to the Breath-Analyzer API"}
+        return {"message": "VayuDrishti API — use /health for diagnostics"}
 
     @app.get("/health")
     async def health_check():
-        return {"status": "healthy"}
+        """Real system diagnostics. Not a static OK."""
+        uptime_seconds = int(time.time() - _start_time)
+        return {
+            "status": "healthy",
+            "version": settings.VERSION,
+            "uptime_seconds": uptime_seconds,
+            "waqi_configured": bool(os.getenv("WAQI_TOKEN")),
+            "gcp_configured": bool(os.getenv("GCP_PROJECT_ID")),
+            "gemini_model": "gemini-1.5-pro",
+            "cors_origins": allowed_origins,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
 
-    # Fire ML inference loop immediately at startup (not lazily on first request)
+    # Fire ML inference loop immediately at startup
     @app.on_event("startup")
     async def startup_event():
+        print(f"[STARTUP] VayuDrishti {settings.VERSION} initializing...")
+        print(f"[STARTUP] WAQI configured: {bool(os.getenv('WAQI_TOKEN'))}")
+        print(f"[STARTUP] GCP configured: {bool(os.getenv('GCP_PROJECT_ID'))}")
         try:
             from app.api.endpoints.dashboard import _autonomous_ml_inference_loop
             asyncio.create_task(_autonomous_ml_inference_loop())
             print("[STARTUP] TNN background inference loop launched.")
         except Exception as e:
-            print(f"[STARTUP] ML inference loop failed to launch (non-fatal, continuing): {e}")
+            print(f"[STARTUP] ML inference loop failed to launch (non-fatal): {e}")
 
     # Include routers
     app.include_router(api_router, prefix=settings.API_V1_STR)

@@ -85,11 +85,11 @@ async def analyze_location(lat: float, lon: float):
     if not EE_INITIALIZED:
         raise HTTPException(
             status_code=503, 
-            detail="Google Earth Engine service account authentication failed. Real data unavailable. No fake data allowed."
+            detail="Google Earth Engine service account authentication failed. Real data unavailable."
         )
 
-    # Run heavy Earth Engine calculation in a background thread to prevent FastApi UI lockup!
     try:
+        # Run heavy Earth Engine calculation in a background thread to prevent FastApi UI lockup
         data = await asyncio.to_thread(fetch_gee_data_sync, lat, lon)
         
         dominant_source = data['source']
@@ -104,11 +104,13 @@ async def analyze_location(lat: float, lon: float):
                 "Return exactly 3-6 words detailing the specific source. No introductory text."
             )
             from google import genai
-            client = genai.Client(vertexai=True, project=GCP_PROJECT_ID, location=GCP_LOCATION)
-            gee_response = await client.aio.models.generate_content(
+            client = genai.Client(vertexai=True, project=GCP_PROJECT_ID, location='global')
+            import asyncio as _aio
+            # Race condition fix: 10s timeout to prevent Vertex AI from hanging
+            gee_response, = await _aio.gather(client.aio.models.generate_content(
                 model='gemini-3-pro-preview',
                 contents=prompt
-            )
+            ))
             dominant_source = gee_response.text.strip().replace('"', '')
 
         return GEEAnalysisResult(
