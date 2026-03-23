@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import LeafletMap from './components/LeafletMap';
 import AuthOverlay from './components/AuthOverlay';
-import LandingPage from './components/LandingPage';
+import NationalIntelligenceLanding from './components/NationalIntelligenceLanding';
 import ComplaintModal from './components/ComplaintModal';
 import MyComplaints from './components/MyComplaints';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function App() {
   const [session, setSession] = useState<any>(null);
@@ -116,11 +117,11 @@ export default function App() {
   const avgAqi = wards.length > 0 ? Math.round(wards.reduce((acc, curr) => acc + curr.aqi, 0) / wards.length) : 0;
 
   if (showLanding) {
-    return <LandingPage onLaunch={() => setShowLanding(false)} />;
+    return <NationalIntelligenceLanding onLaunch={() => setShowLanding(false)} />;
   }
 
   return (
-    <div className="bg-[#0c0e12] text-slate-100 font-sans selection:bg-cyan-500/30 overflow-hidden h-screen flex flex-col relative w-screen">
+    <div className="bg-gradient-to-br from-slate-950 via-blue-950/20 to-slate-950 text-slate-100 font-sans selection:bg-cyan-500/30 overflow-hidden h-screen flex flex-col relative w-screen">
       
       {/* ComplaintModal — real DB submission, replaces the old fake alert() */}
       {showComplaintModal && (
@@ -134,8 +135,9 @@ export default function App() {
       {/* ─── Supabase Native Auth Gateway ─── */}
       <AuthOverlay session={session} setSession={setSession} userProfile={userProfile} setUserProfile={setUserProfile} />
 
-      {/* TopNavBar */}
-      <header className="fixed top-0 w-full z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/10 shadow-[0_4px_20px_rgba(0,242,255,0.1)] flex items-center justify-between px-8 h-20">
+      {/* TopNavBar with Glassmorphism */}
+      <header className="fixed top-0 w-full z-50 bg-slate-950/60 backdrop-blur-2xl border-b border-white/10 shadow-[0_4px_30px_rgba(0,242,255,0.15)] flex items-center justify-between px-8 h-20">
+        <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 to-blue-500/5 pointer-events-none"></div>
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-gradient-to-tr from-cyan-500 to-blue-500 rounded-sm flex items-center justify-center">
@@ -228,12 +230,14 @@ export default function App() {
           </footer>
         </section>
 
-        {/* Right Side Panel: The Delegate Brief */}
-        <aside className="w-[450px] bg-slate-950 border-l border-slate-900 p-8 flex flex-col gap-6 overflow-y-auto z-20 shrink-0 relative shadow-[-20px_0_50px_rgba(0,0,0,0.5)] no-scrollbar">
+        {/* Right Side Panel: The Delegate Brief with Glassmorphism */}
+        <aside className="w-[450px] bg-slate-950/40 backdrop-blur-2xl border-l border-slate-800/50 p-8 flex flex-col gap-6 overflow-y-auto z-20 shrink-0 relative shadow-[-20px_0_50px_rgba(0,0,0,0.5)] no-scrollbar">
+          <div className="absolute inset-0 bg-gradient-to-b from-cyan-500/5 to-transparent pointer-events-none"></div>
           
           {selectedWard ? (
-             <div className="flex flex-col h-full animate-slide-in">
-                <div className="flex justify-between items-start mb-4">
+             <div className="flex flex-col h-full animate-slide-in relative">
+                
+                <div className="flex justify-between items-start mb-4 relative z-10">
                     <div className="flex flex-col">
                         <span className="font-label text-xs tracking-[0.2em] font-bold uppercase text-cyan-500 mb-1">Sector Acquired</span>
                         <h2 className="font-headline text-3xl font-black uppercase text-white tracking-tight leading-none">{selectedWard.name}</h2>

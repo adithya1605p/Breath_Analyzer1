@@ -23,6 +23,12 @@ export default function ComplaintModal({ ward, userProfile, onClose }: Complaint
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!description.trim()) { setError('Please provide a description of the issue.'); return; }
+    
+    // Check if user is logged in
+    if (!userProfile || !userProfile.id) {
+      setError('You must be logged in to submit a complaint. Please sign in first.');
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -31,15 +37,25 @@ export default function ComplaintModal({ ward, userProfile, onClose }: Complaint
     try {
       const API_BASE = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8080';
       const token = getToken();
+      
+      if (!token) {
+        throw new Error('Authentication token not found. Please log in again.');
+      }
+
+      // Ensure citizen_id is a valid UUID string
+      const citizenId = typeof userProfile.id === 'string' ? userProfile.id : String(userProfile.id);
 
       const payload = {
+        citizen_id: citizenId,
         ward: ward?.name || 'Unknown',
         category,
         description: description.trim(),
-        citizen_id: userProfile?.id,
-        lat: ward?.lat,
-        lon: ward?.lon,
+        location_lat: ward?.lat || 28.6139,
+        location_lon: ward?.lon || 77.2090,
+        media_url: null,
       };
+
+      console.log('[ComplaintModal] Submitting payload:', { ...payload, citizen_id: citizenId.substring(0, 8) + '...' });
 
       const res = await fetch(`${API_BASE}/api/v1/admin/complaints`, {
         method: 'POST',
@@ -55,12 +71,14 @@ export default function ComplaintModal({ ward, userProfile, onClose }: Complaint
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
+        console.error('[ComplaintModal] Error response:', errData);
         throw new Error(errData.detail || `Server error ${res.status}`);
       }
 
       const data = await res.json();
       setSubmitted({ id: data.id });
     } catch (err: any) {
+      console.error('[ComplaintModal] Submit error:', err);
       setError(err.message || 'Failed to submit. Please check your connection and try again.');
     } finally {
       setLoading(false);
