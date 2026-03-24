@@ -67,7 +67,8 @@ WAQI_BOUNDS_URL = f"https://api.waqi.info/map/bounds/?latlng=28.4,76.8,28.9,77.4
 
 def load_geojson(filename: str) -> list:
     data_list = []
-    path = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'web-frontend', 'public', filename)
+    # Look in backend/app/data/ directory
+    path = os.path.join(os.path.dirname(__file__), '..', '..', 'data', filename)
     if os.path.exists(path):
         try:
             with open(path, 'r', encoding='utf-8') as f:
