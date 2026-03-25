@@ -7,7 +7,7 @@ steps:
       - 'gcr.io/$PROJECT_ID/vayudrishti-backend:latest'
       - '-t'
       - 'gcr.io/$PROJECT_ID/vayudrishti-backend:latest'
-      - './backend'
+      - '.'
     id: 'build-backend'
 
   # Push backend
